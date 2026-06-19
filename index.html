@@ -1,0 +1,258 @@
+import logging
+import asyncio
+from datetime import datetime, timedelta
+from urllib.parse import quote
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+
+# --- ТОКЕН ---
+TOKEN = "8847786974:AAHXFaq4Q7ec7cPYGz2syxzhFgyanQL3pSU"
+
+active_timers = {}
+application = None
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+
+
+# --- МЕНЮ ---
+def get_main_menu():
+    keyboard = [
+        [InlineKeyboardButton("🕐 Часы и таймеры", callback_data='mode_time')],
+        [InlineKeyboardButton("🏆 Fortnite Tracker (PR)", callback_data='mode_fortnite')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_time_menu():
+    keyboard = [
+        [InlineKeyboardButton("🕐 Текущее время", callback_data='time')],
+        [InlineKeyboardButton("📅 Текущая дата", callback_data='date')],
+        [InlineKeyboardButton("🕒 Полная информация", callback_data='full')],
+        [InlineKeyboardButton("⏰ Таймер", callback_data='timer_menu')],
+        [InlineKeyboardButton("🏠 Главное меню", callback_data='back_to_main')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_timer_menu():
+    keyboard = [
+        [InlineKeyboardButton("⏰ Через 5 минут", callback_data='timer_5')],
+        [InlineKeyboardButton("⏰ Через 15 минут", callback_data='timer_15')],
+        [InlineKeyboardButton("⏰ Через 30 минут", callback_data='timer_30')],
+        [InlineKeyboardButton("⏰ Через 1 час", callback_data='timer_60')],
+        [InlineKeyboardButton("⬅️ Назад", callback_data='back_to_time')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_fortnite_menu():
+    keyboard = [
+        [InlineKeyboardButton("🔍 Поиск PR", callback_data='fortnite_search')],
+        [InlineKeyboardButton("🏠 Главное меню", callback_data='back_to_main')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_back_button():
+    keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data='back_to_time')]]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_back_to_main():
+    keyboard = [[InlineKeyboardButton("🏠 В главное меню", callback_data='back_to_main')]]
+    return InlineKeyboardMarkup(keyboard)
+
+
+# --- ТАЙМЕР ---
+async def send_timer_notification(chat_id: int, minutes: int):
+    try:
+        await asyncio.sleep(minutes * 60)
+        if chat_id in active_timers and active_timers[chat_id] == minutes:
+            await application.bot.send_message(
+                chat_id=chat_id,
+                text=f"🔔 Прошло {minutes} минут!\n🕐 {datetime.now().strftime('%H:%M:%S')}",
+                reply_markup=get_back_button()
+            )
+            del active_timers[chat_id]
+    except:
+        pass
+
+
+# --- КОМАНДЫ ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👋 Привет! Выбери режим:", reply_markup=get_main_menu())
+
+
+async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        f"🕐 {datetime.now().strftime('%H:%M:%S')}",
+        reply_markup=get_back_button()
+    )
+
+
+async def date_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        f"📅 {datetime.now().strftime('%d.%m.%Y')}",
+        reply_markup=get_back_button()
+    )
+
+
+async def full_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    now = datetime.now()
+    info = (
+        f"📊 Полная информация:\n"
+        f"🕐 {now.strftime('%H:%M:%S')}\n"
+        f"📅 {now.strftime('%d.%m.%Y')}\n"
+        f"📆 {now.strftime('%A')}\n"
+        f"🗓️ {now.strftime('%B')}"
+    )
+    await update.message.reply_text(info, reply_markup=get_back_button())
+
+
+async def timer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("⏰ Выбери время:", reply_markup=get_timer_menu())
+
+
+async def stop_timer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if chat_id in active_timers:
+        del active_timers[chat_id]
+        await update.message.reply_text("❌ Таймер остановлен!", reply_markup=get_back_button())
+    else:
+        await update.message.reply_text("⚠️ Нет активных таймеров.", reply_markup=get_back_button())
+
+
+async def pr_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Главная команда - отправляет ссылку на профиль"""
+    if not context.args:
+        await update.message.reply_text(
+            "❌ Используй: `/pr <Ник>`\n"
+            "Пример: `/pr Ninja`\n"
+            "Пример: `/pr SRG коданиyache`",
+            parse_mode="Markdown"
+        )
+        return
+
+    nickname = ' '.join(context.args)
+    encoded = quote(nickname)
+    url = f"https://fortnitetracker.com/profile/all/{encoded}"
+
+    await update.message.reply_text(
+        f"🏆 **Профиль {nickname}**\n\n"
+        f"🔗 {url}\n\n"
+        f"📊 Там ты увидишь PR Points и всю статистику.\n"
+        f"💡 Если не открывается — используй VPN.",
+        parse_mode="Markdown",
+        reply_markup=get_back_to_main()
+    )
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📋 Команды:\n"
+        "/start - Меню\n"
+        "/time - Время\n"
+        "/date - Дата\n"
+        "/full - Всё сразу\n"
+        "/timer - Таймер\n"
+        "/stop - Остановить таймер\n"
+        "/pr <ник> - Профиль Fortnite\n"
+        "/help - Помощь"
+    )
+
+
+# --- КНОПКИ ---
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    now = datetime.now()
+    chat_id = query.message.chat.id
+
+    if data == 'back_to_main':
+        await query.edit_message_text("🏠 Главное меню:", reply_markup=get_main_menu())
+        return
+
+    if data == 'back_to_time':
+        await query.edit_message_text("🕐 Часы и таймеры:", reply_markup=get_time_menu())
+        return
+
+    if data == 'mode_time':
+        await query.edit_message_text("🕐 Часы и таймеры:", reply_markup=get_time_menu())
+        return
+
+    if data == 'mode_fortnite':
+        await query.edit_message_text(
+            "🏆 Введи команду:\n`/pr <Ник>`\n\nПример: `/pr Ninja`",
+            parse_mode="Markdown",
+            reply_markup=get_fortnite_menu()
+        )
+        return
+
+    if data == 'fortnite_search':
+        await query.edit_message_text(
+            "🔍 Введи:\n`/pr <Ник>`",
+            parse_mode="Markdown",
+            reply_markup=get_back_to_main()
+        )
+        return
+
+    if data == 'time':
+        await query.edit_message_text(f"🕐 {now.strftime('%H:%M:%S')}", reply_markup=get_back_button())
+        return
+
+    if data == 'date':
+        await query.edit_message_text(f"📅 {now.strftime('%d.%m.%Y')}", reply_markup=get_back_button())
+        return
+
+    if data == 'full':
+        await query.edit_message_text(
+            f"📊 {now.strftime('%H:%M:%S')}\n📅 {now.strftime('%d.%m.%Y')}\n📆 {now.strftime('%A')}",
+            reply_markup=get_back_button()
+        )
+        return
+
+    if data == 'timer_menu':
+        await query.edit_message_text("⏰ Выбери время:", reply_markup=get_timer_menu())
+        return
+
+    if data.startswith('timer_'):
+        minutes = int(data.split('_')[1])
+        if chat_id in active_timers:
+            await query.edit_message_text("⚠️ Уже есть таймер.", reply_markup=get_back_button())
+            return
+
+        active_timers[chat_id] = minutes
+        asyncio.create_task(send_timer_notification(chat_id, minutes))
+        await query.edit_message_text(
+            f"✅ Таймер на {minutes} минут установлен!",
+            reply_markup=get_back_button()
+        )
+        return
+
+
+# --- ЗАПУСК ---
+def main():
+    global application
+    application = Application.builder().token(TOKEN).build()
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("time", time_command))
+    application.add_handler(CommandHandler("date", date_command))
+    application.add_handler(CommandHandler("full", full_command))
+    application.add_handler(CommandHandler("timer", timer_command))
+    application.add_handler(CommandHandler("stop", stop_timer_command))
+    application.add_handler(CommandHandler("pr", pr_command))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CallbackQueryHandler(button_callback))
+
+    print("🤖 Бот запущен!")
+    application.run_polling()
+
+
+if __name__ == "__main__":
+    main()
