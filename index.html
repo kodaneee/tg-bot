@@ -1,12 +1,13 @@
 import logging
 import asyncio
+from tok import t
 from datetime import datetime, timedelta
 from urllib.parse import quote
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # --- ТОКЕН ---
-TOKEN = "8847786974:AAHXFaq4Q7ec7cPYGz2syxzhFgyanQL3pSU"
+TOKEN = t
 
 active_timers = {}
 application = None
